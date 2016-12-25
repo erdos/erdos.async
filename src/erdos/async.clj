@@ -38,7 +38,24 @@
   `(let [c# (delay (go ~@bodies))]
      (go-fn (<! @c#))))
 
-(defn partition-by-delay [dispatch msecs input-chan]
+;; TODO: impl this
+(defn directory-watch-chan
+  "Returns a channel of file system change events for a given directory."
+  [directory]
+  (let []
+    (reify
+      impl/Channel
+      (closed? [_] false)
+      (close! [_] nil)
+      impl/ReadPort
+      (take! [_ fn1]
+        nil
+        ))))
+
+;; example usage:
+;; (partition-by-delay :file-name 5000 file-change-channel)
+;; TODO: impl dispatch usage
+(defn partition-by-delay [dispatch-fn msecs input-chan]
   (let [output (async/chan)]
     (async/go-loop []
       (if-let [x (<! input-chan)]
@@ -54,3 +71,32 @@
           (recur))
         (async/close! output)))
     output))
+
+(defn partition-delay [msecs input-chan]
+  (let [output (async/chan)]
+    (async/go-loop []
+      (if-let [x (<! input-chan)]
+        (do
+          (loop [coll [x]] ;; create a queue
+            (let [[x c] (async/alts! [input-chan (async/timeout msecs)])]
+              (if (= c input-chan)
+                (if x
+                  (recur (conj coll x))
+                  (do (>! output coll)
+                      (async/close! output)))
+                (>! output coll))))
+          (recur))
+        (async/close! output)))
+    output))
+
+
+(defmacro dochan
+  "Like (doseq) for channels. Returns a channel that is closed after finished iteration."
+  [[k c :as kvs] & bodies]
+  (assert (= 2 (count kvs)))
+  `(let [result# (chan)]
+     (go (loop []
+           (if-let [~k (<! ~c)]
+             (do ~@bodies (recur))
+             (async/close! result))))
+     result#))
