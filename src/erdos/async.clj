@@ -2,6 +2,18 @@
   (:require [clojure.core.async :refer [go chan <! >!] :as async]
             [clojure.core.async.impl.protocols :as impl]))
 
+(defmacro go-try
+  "A go block that wraps exceptions and returns them as values."
+  [& bodies]
+  `(go (try ~@bodies
+            (catch Throwable t# t#))))
+
+(defmacro <?
+  "A take macro that throws Throwable values."
+  [c]
+  `(let [r# (<! ~c)]
+     (if (instance? java.lang.Throwable r#) (throw r#) r#)))
+
 
 (defn fn-chan [body-fn]
   (let [end? (atom false)]
@@ -45,7 +57,7 @@
   [fn1]
   (let [c (chan)]
     (go (loop []
-          (when-some [x (fn1)]
+          (if-some [x (fn1)]
             (do (>! c x)
                 (recur))
             (async/close! c))))
