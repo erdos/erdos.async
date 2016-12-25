@@ -121,6 +121,13 @@
         (async/close! output)))
     output))
 
+(defn partition-delay [msecs input-chan]
+  (let [out (chan)]
+    (dochan [xs (partition-by-delay identity msecs input-chan)]
+      (doseq [x xs]
+        (>! out x)))
+    (close! out)
+    out))
 
 (defn partition-delay [msecs input-chan]
   (let [output (async/chan)]
